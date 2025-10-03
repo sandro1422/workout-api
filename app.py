@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
+from flask_jwt_extended import create_access_token, JWTManager, jwt_required, get_jwt_identity
 
 from db import db
 from models import User
@@ -9,10 +10,11 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secretKey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///workout.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = 'JWTsecretKey'
 
 db.init_app(app)
 bcrypt = Bcrypt(app)
-
+jwt = JWTManager(app)
 
 @app.route('/')
 def home():
@@ -49,6 +51,31 @@ def register():
     db.session.commit()
 
     return jsonify({'message': 'User registered successfully'}), 201
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user:
+        return jsonify({'message': 'Invalid username'}), 401
+
+    if not bcrypt.check_password_hash(user.password, password):
+        return jsonify({'message': 'Invalid password'}), 401
+    
+    access_token = create_access_token(identity=str(user.id))
+    return jsonify(access_token=access_token), 200
+
+@app.route('/profile', methods=['GET'])
+@jwt_required()
+def profile():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    
+    return jsonify(logged_in_username=user.username), 200
 
 if __name__ == '__main__':
     with app.app_context():

@@ -80,17 +80,15 @@ def profile():
 @app.route('/exercises', methods=['GET'])
 def get_exercises():
     all_exercises = Exercise.query.all()
-    exercises_return = []
-    
-    for exercise in all_exercises:
-        exercise_as_dict = {
+    exercises_list = [
+        {
             'id': exercise.id,
             'name': exercise.name,
             'description': exercise.description,
             'guide': exercise.guide
-        }
-        exercises_return.append(exercise_as_dict)
-    return jsonify(exercises_return), 200
+        } for exercise in all_exercises
+    ]
+    return jsonify(exercises_list), 200
 
 if __name__ == '__main__':
     with app.app_context():

@@ -1,17 +1,19 @@
-from flask import Blueprint, request, jsonify
+from flask import request, jsonify
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import create_access_token, JWTManager, jwt_required, get_jwt_identity
-
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from models import User, Exercise, WorkoutPlan, DailySession, SessionExercise, WeightInsert, Goal
 from db import db
+from flask_smorest import Blueprint as SmorestBlueprint
+from schemas import UserSchema, AuthSchema
 
-bp = Blueprint('bp', __name__)
+blp = SmorestBlueprint('blp', __name__, url_prefix="")
+bcrypt = Bcrypt()
 
-@bp.route('/')
-def home():
-    return '<h1>hello there</h1>'
-
-@bp.route('/register', methods=['POST'])
+@blp.route('/register', methods=['POST'])
+@blp.doc(
+    summary="Register a new user",
+)
+# @blp.arguments(UserSchema)
 def register():
     data = request.get_json()
     username = data.get('username')
@@ -35,7 +37,7 @@ def register():
     if email_exists:
         return jsonify({'message': 'Email already exists'}), 409
 
-    hashed_password = Bcrypt().generate_password_hash(password).decode('utf-8')
+    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
     new_user = User(username=username, email=email, password=hashed_password)
     
     db.session.add(new_user)
@@ -43,7 +45,11 @@ def register():
 
     return jsonify({'message': 'User registered successfully'}), 201
 
-@bp.route('/login', methods=['POST'])
+@blp.route('/login', methods=['POST'])
+@blp.doc(
+    summary="Authenticate user",
+)
+# @blp.arguments(AuthSchema)
 def login():
     data = request.get_json()
     username = data.get('username')
@@ -54,13 +60,16 @@ def login():
     if not user:
         return jsonify({'message': 'Invalid username'}), 401
 
-    if not Bcrypt().check_password_hash(user.password, password):
+    if not bcrypt.check_password_hash(user.password, password):
         return jsonify({'message': 'Invalid password'}), 401
     
     access_token = create_access_token(identity=str(user.id))
     return jsonify(access_token=access_token), 200
 
-@bp.route('/profile', methods=['GET'])
+@blp.route('/profile', methods=['GET'])
+@blp.doc(
+    summary="Get user profile",
+)
 @jwt_required()
 def profile():
     current_user_id = get_jwt_identity()
@@ -68,7 +77,10 @@ def profile():
     
     return jsonify(logged_in_username=user.username), 200
 
-@bp.route('/exercises', methods=['GET'])
+@blp.route('/exercises', methods=['GET'])
+@blp.doc(
+    summary="Get all exercises",
+)
 def get_exercises():
     all_exercises = Exercise.query.all()
     exercises_list = [
@@ -79,10 +91,12 @@ def get_exercises():
             'guide': exercise.guide
         } for exercise in all_exercises
     ]
-
     return jsonify(exercises_list), 200
 
-@bp.route('/workout_plans', methods=['POST'])
+@blp.route('/workout_plans', methods=['POST'])
+@blp.doc(
+    summary="Create a new workout plan",
+)
 @jwt_required()
 def create_workout_plan():
     current_user_id = get_jwt_identity()
@@ -117,7 +131,7 @@ def create_workout_plan():
                     exercise_id=exercise_data['exercise_id']
                 )
                 db.session.add(new_session_exercise)
-
+        
         db.session.commit()
 
         return jsonify({"message": "Workout plan created successfully!", "plan_id": new_plan.id}), 201
@@ -126,7 +140,10 @@ def create_workout_plan():
         db.session.rollback()
         return jsonify({"error": str(e), "message": "Failed to create workout plan"}), 400
 
-@bp.route('/workout_plans', methods=['GET'])
+@blp.route('/workout_plans', methods=['GET'])
+@blp.doc(
+    summary="Get all user workout plans",
+)
 @jwt_required()
 def get_workout_plans():
     current_user_id = get_jwt_identity()
@@ -143,33 +160,32 @@ def get_workout_plans():
             'date_created': plan.date_created.isoformat(),
             'daily_sessions': []
         }
-
         for session in plan.daily_sessions:
             session_data = {
                 'id': session.id,
                 'day_of_week': session.day_of_week,
                 'exercises': []
             }
-
-            for session in session.session_exercises:
-                exercise_details = Exercise.query.get(session.exercise_id)
+            for session_ex in session.session_exercises:
+                exercise_details = Exercise.query.get(session_ex.exercise_id)
                 session_exercise_data = {
-                    'sets': session.sets,
-                    'reps': session.reps,
-                    'duration_min': session.duration_min,
-                    'distance_km': session.distance_km,
+                    'sets': session_ex.sets,
+                    'reps': session_ex.reps,
+                    'duration_min': session_ex.duration_min,
+                    'distance_km': session_ex.distance_km,
                     'exercise_name': exercise_details.name,
                     'exercise_description': exercise_details.description,
                     'exercise_guide': exercise_details.guide
                 }
                 session_data['exercises'].append(session_exercise_data)
-
             plan_data['daily_sessions'].append(session_data)
         plans_list.append(plan_data)
-
     return jsonify(plans_list), 200
 
-@bp.route('/weight', methods=['POST'])
+@blp.route('/weight', methods=['POST'])
+@blp.doc(
+    summary="Add a new weight entry",
+)
 @jwt_required()
 def add_weight():
     current_user_id = get_jwt_identity()
@@ -186,13 +202,14 @@ def add_weight():
     except Exception as e:
         return jsonify({"error": str(e), "message": "Failed to add weight entry"}), 400
 
-@bp.route('/weight', methods=['GET'])
+@blp.route('/weight', methods=['GET'])
+@blp.doc(
+    summary="Get user's weight",
+)
 @jwt_required()
 def get_weight_history():
     current_user_id = get_jwt_identity()
-
     weight_entries = WeightInsert.query.filter_by(user_id=current_user_id).order_by(WeightInsert.date_recorded.asc()).all()
-
     history = [
         {
             'id': entry.id,
@@ -200,10 +217,12 @@ def get_weight_history():
             'date_recorded': entry.date_recorded.isoformat()
         } for entry in weight_entries
     ]
-
     return jsonify(history), 200
 
-@bp.route('/goals', methods=['POST'])
+@blp.route('/goals', methods=['POST'])
+@blp.doc(
+    summary="Set a new goal",
+)
 @jwt_required()
 def set_goal():
     current_user_id = get_jwt_identity()
@@ -221,13 +240,14 @@ def set_goal():
     except Exception as e:
         return jsonify({"error": str(e), "message": "Failed to set goal"}), 400
 
-@bp.route('/goals', methods=['GET'])
+@blp.route('/goals', methods=['GET'])
+@blp.doc(
+    summary="Get all user goals",
+)
 @jwt_required()
 def get_goals():
     current_user_id = get_jwt_identity()
-
     goals = Goal.query.filter_by(user_id=current_user_id).all()
-
     goals_list = [
         {
             'id': goal.id,
@@ -236,5 +256,4 @@ def get_goals():
             'is_achieved': goal.is_achieved
         } for goal in goals
     ]
-
     return jsonify(goals_list), 200

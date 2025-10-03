@@ -3,7 +3,7 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import create_access_token, JWTManager, jwt_required, get_jwt_identity
 
 from db import db
-from models import User
+from models import User, Exercise
 
 app = Flask(__name__)
 
@@ -76,6 +76,21 @@ def profile():
     user = User.query.get(current_user_id)
     
     return jsonify(logged_in_username=user.username), 200
+
+@app.route('/exercises', methods=['GET'])
+def get_exercises():
+    all_exercises = Exercise.query.all()
+    exercises_return = []
+    
+    for exercise in all_exercises:
+        exercise_as_dict = {
+            'id': exercise.id,
+            'name': exercise.name,
+            'description': exercise.description,
+            'guide': exercise.guide
+        }
+        exercises_return.append(exercise_as_dict)
+    return jsonify(exercises_return), 200
 
 if __name__ == '__main__':
     with app.app_context():

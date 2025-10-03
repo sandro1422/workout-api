@@ -1,5 +1,8 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, request, jsonify
+from flask_bcrypt import Bcrypt
+
+from db import db
+from models import User
 
 app = Flask(__name__)
 
@@ -7,11 +10,47 @@ app.config['SECRET_KEY'] = 'secretKey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///workout.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+db.init_app(app)
+bcrypt = Bcrypt(app)
+
 
 @app.route('/')
 def home():
     return '<h1>hello there</h1>'
 
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+
+    if not username:
+        return jsonify({'message': 'Username is required'}), 400
+    
+    if not email:
+        return jsonify({'message': 'Email is required'}), 400
+
+    if not password:
+        return jsonify({'message': 'Password is required'}), 400
+
+    username_exists = User.query.filter_by(username=username).first()
+    if username_exists:
+        return jsonify({'message': 'Username already exists'}), 409
+
+    email_exists = User.query.filter_by(email=email).first()
+    if email_exists:
+        return jsonify({'message': 'Email already exists'}), 409
+
+    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+    new_user = User(username=username, email=email, password=hashed_password)
+    
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'User registered successfully'}), 201
+
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)

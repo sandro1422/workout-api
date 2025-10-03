@@ -6,6 +6,9 @@ class User(db.Model):
     username = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
+    workout_plans = db.relationship('WorkoutPlan', backref='user', lazy=True)
+    weight_inserts = db.relationship('WeightInsert', backref='user', lazy=True)
+    goals = db.relationship('Goal', backref='user', lazy=True)
 
     def __repr__(self):
         return f"User('{self.username}', '{self.email}')"
@@ -53,3 +56,22 @@ class SessionExercise(db.Model):
 
     def __repr__(self):
         return f"SessionExercise(Exercise ID: '{self.exercise_id}')"
+    
+class WeightInsert(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    weight_kg = db.Column(db.Float, nullable=False)
+    date_recorded = db.Column(db.DateTime, nullable=False, default=datetime.now(timezone.utc))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    def __repr__(self):
+        return f"WeightInsert('{self.weight_kg}' at '{self.date_recorded}')"
+
+class Goal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    goal_type = db.Column(db.String(50), nullable=False)
+    target_value = db.Column(db.Float, nullable=False)
+    is_achieved = db.Column(db.Boolean, nullable=False, default=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    def __repr__(self):
+        return f"Goal('{self.goal_type}' - '{self.target_value}')"
